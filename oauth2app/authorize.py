@@ -5,12 +5,12 @@
 
 
 from django.http import HttpResponseRedirect
-try:
-    from django.http.request import absolute_http_url_re  # Django 1.5+
-except ImportError:
-    from django.http import absolute_http_url_re
-from django.db.models.loading import get_model
+from django.apps import apps
 from urllib import urlencode
+try:
+    from urllib import parse as urlparse
+except ImportError:
+    import urlparse
 from .consts import ACCESS_TOKEN_EXPIRATION, REFRESHABLE
 from .consts import CODE, TOKEN, CODE_AND_TOKEN
 from .consts import AUTHENTICATION_METHOD, MAC, BEARER, MAC_KEY_LENGTH
@@ -155,13 +155,13 @@ class Authorizer(object):
         * *request:* Django HttpRequest object.
 
         *Returns None*"""
-        self.response_type = request.REQUEST.get('response_type')
-        self.client_id = request.REQUEST.get('client_id')
-        self.redirect_uri = request.REQUEST.get('redirect_uri')
-        self.scope = request.REQUEST.get('scope')
+        self.response_type = request.GET.get('response_type',request.POST.get('response_type'))
+        self.client_id = request.GET.get('client_id',request.POST.get('client_id'))
+        self.redirect_uri = request.GET.get('redirect_uri',request.POST.get('redirect_uri'))
+        self.scope = request.GET.get('scope',request.POST.get('scope'))
         if self.scope is not None:
             self.scope = set(self.scope.split())
-        self.state = request.REQUEST.get('state')
+        self.state = request.GET.get('state',request.POST.get('state'))
         self.user = request.user
         self.request = request
         try:
@@ -174,7 +174,7 @@ class Authorizer(object):
 
     def _validate(self):
         """Validate the request."""
-        ClientModel = get_model(*CLIENT_MODEL.split('.', 1))
+        ClientModel = apps.get_model(*CLIENT_MODEL.split('.', 1))
 
         if self.client_id is None:
             raise InvalidRequest('No client_id')
@@ -202,7 +202,9 @@ class Authorizer(object):
         if self.authorized_response_type & RESPONSE_TYPES[self.response_type] == 0:
             raise UnauthorizedClient("Response type %s not allowed." %
                 self.response_type)
-        if not absolute_http_url_re.match(self.redirect_uri):
+        if not urlparse.urlparse(self.redirect_uri).scheme:
+            raise InvalidRequest('Absolute URI required for redirect_uri')
+        if not urlparse.urlparse(self.redirect_uri).netloc:
             raise InvalidRequest('Absolute URI required for redirect_uri')
         # Scope
         if self.authorized_scope is not None and self.scope is None:
@@ -223,7 +225,9 @@ class Authorizer(object):
         """Raise MissingRedirectURI if no redirect_uri is available."""
         if self.redirect_uri is None:
             raise MissingRedirectURI('No redirect_uri to send response.')
-        if not absolute_http_url_re.match(self.redirect_uri):
+        if not urlparse.urlparse(self.redirect_uri).scheme:
+            raise MissingRedirectURI('Absolute redirect_uri required.')
+        if not urlparse.urlparse(self.redirect_uri).netloc:
             raise MissingRedirectURI('Absolute redirect_uri required.')
 
     def error_redirect(self):

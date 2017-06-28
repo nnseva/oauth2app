@@ -5,7 +5,7 @@
 
 
 from base64 import b64encode
-from django.db.models.loading import get_model
+from django.apps import apps
 from django.http import HttpResponse
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
@@ -137,23 +137,23 @@ class TokenGenerator(object):
         * *request:* Django HttpRequest object.
 
         """
-        self.grant_type = request.REQUEST.get('grant_type')
-        self.client_id = request.REQUEST.get('client_id')
+        self.grant_type = request.GET.get('grant_type',request.POST.get('grant_type'))
+        self.client_id = request.GET.get('client_id',request.POST.get('client_id'))
         self.client_secret = request.POST.get('client_secret')
-        self.scope = request.REQUEST.get('scope')
+        self.scope = request.GET.get('scope',request.POST.get('scope'))
         if self.scope is not None:
             self.scope = set(self.scope.split())
         # authorization_code, see 4.1.3.  Access Token Request
-        self.code_key = request.REQUEST.get('code')
-        self.redirect_uri = request.REQUEST.get('redirect_uri')
+        self.code_key = request.GET.get('code',request.POST.get('code'))
+        self.redirect_uri = request.GET.get('redirect_uri',request.POST.get('redirect_uri'))
         # refresh_token, see 6.  Refreshing an Access Token
-        self.refresh_token = request.REQUEST.get('refresh_token')
+        self.refresh_token = request.GET.get('refresh_token',request.POST.get('refresh_token'))
         # password, see 4.3.2. Access Token Request
-        self.email = request.REQUEST.get('email')
-        self.username = request.REQUEST.get('username')
-        self.password = request.REQUEST.get('password')
+        self.email = request.GET.get('email',request.POST.get('email'))
+        self.username = request.GET.get('username',request.POST.get('username'))
+        self.password = request.GET.get('password',request.POST.get('password'))
         # Optional json callback
-        self.callback = request.REQUEST.get('callback')
+        self.callback = request.GET.get('callback',request.POST.get('callback'))
         self.request = request
         try:
             self.validate()
@@ -175,7 +175,7 @@ class TokenGenerator(object):
 
     def _validate(self):
         """Validate the request."""
-        ClientModel = get_model(*CLIENT_MODEL.split('.', 1))
+        ClientModel = apps.get_model(*CLIENT_MODEL.split('.', 1))
 
         # Check response type
         if self.grant_type is None:
